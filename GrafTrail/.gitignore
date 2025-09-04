@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# PyInstaller
+build/
+dist/
+*.spec  # keep if you want; remove this line if you commit the spec on purpose
+
+# IDE
+.vscode/
+.idea/
