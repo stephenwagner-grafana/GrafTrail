@@ -384,7 +384,7 @@ class SettingsDialog(QtWidgets.QDialog):
             w.valueChanged.connect(lambda _=None, a=attr, ww=w: self.update_cfg(a, ww.value()))
 
         btn_reset.clicked.connect(self.reset_defaults)
-        btn_close.clicked.connect(self.close)
+        btn_close.clicked.connect(self.hide)
 
     def pick_color(self, which: str):
         initial = self.cfg.color_start if which == "start" else self.cfg.color_end
@@ -488,6 +488,7 @@ class Tray(QtWidgets.QSystemTrayIcon):
 def main():
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     app.setOrganizationName(ORG_NAME); app.setOrganizationDomain(ORG_DOMAIN); app.setApplicationName(APP_NAME)
 
     settings = QtCore.QSettings(QtCore.QSettings.UserScope, ORG_NAME, APP_NAME)
