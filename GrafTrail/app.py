@@ -38,9 +38,12 @@ SM_CXVIRTUALSCREEN = 78
 SM_CYVIRTUALSCREEN = 79
 VK_LCONTROL = 0xA2
 VK_RCONTROL = 0xA3
+VK_LSHIFT = 0xA0
+VK_RSHIFT = 0xA1
 
-# Platform-specific global state for CTRL key tracking
+# Platform-specific global state for CTRL and SHIFT key tracking
 _ctrl_pressed = False
+_shift_pressed = False
 _key_monitor = None
 
 class GlobalKeyMonitor(QtCore.QObject):
@@ -49,15 +52,20 @@ class GlobalKeyMonitor(QtCore.QObject):
     def __init__(self):
         super().__init__()
         self.ctrl_pressed = False
+        self.shift_pressed = False
         
     def eventFilter(self, obj, event):
-        """Qt event filter to track CTRL key state globally."""
+        """Qt event filter to track CTRL and SHIFT key state globally."""
         if event.type() == QtCore.QEvent.KeyPress:
             if event.key() == QtCore.Qt.Key_Control:
                 self.ctrl_pressed = True
+            elif event.key() == QtCore.Qt.Key_Shift:
+                self.shift_pressed = True
         elif event.type() == QtCore.QEvent.KeyRelease:
             if event.key() == QtCore.Qt.Key_Control:
                 self.ctrl_pressed = False
+            elif event.key() == QtCore.Qt.Key_Shift:
+                self.shift_pressed = False
         return False
 
 def _init_key_monitor():
@@ -134,6 +142,31 @@ def ctrl_down() -> bool:
         if app:
             modifiers = app.keyboardModifiers()
             return bool(modifiers & QtCore.Qt.ControlModifier)
+        
+        return False
+
+def shift_down() -> bool:
+    """Check if either SHIFT key is currently pressed (cross-platform)."""
+    current_platform = get_platform()
+    
+    if current_platform == "windows":
+        u32 = ctypes.windll.user32
+        return bool((u32.GetAsyncKeyState(VK_LSHIFT) & 0x8000) or
+                    (u32.GetAsyncKeyState(VK_RSHIFT) & 0x8000))
+    else:
+        # Use Qt-based monitoring for macOS/Linux
+        global _key_monitor
+        if _key_monitor is None:
+            _init_key_monitor()
+        
+        if _key_monitor:
+            return _key_monitor.shift_pressed
+        
+        # Fallback: check current application key state
+        app = QtWidgets.QApplication.instance()
+        if app:
+            modifiers = app.keyboardModifiers()
+            return bool(modifiers & QtCore.Qt.ShiftModifier)
         
         return False
 
@@ -230,6 +263,7 @@ class Config:
     ema_alpha:    float = 0.35
     min_dist_px:  float = 3.5
     tension:      float = 1.0  # Catmull–Rom tension
+    fade_slowdown: float = 2.5  # Controls fade curve (1.0=linear, higher=slower fade)
 
     @staticmethod
     def _qcolor_to_hex(c: QtGui.QColor) -> str:
@@ -249,6 +283,7 @@ class Config:
         s.setValue("ema_alpha",    self.ema_alpha)
         s.setValue("min_dist_px",  self.min_dist_px)
         s.setValue("tension",      self.tension)
+        s.setValue("fade_slowdown", self.fade_slowdown)
 
     @staticmethod
     def load(s: QtCore.QSettings) -> "Config":
@@ -261,12 +296,13 @@ class Config:
         cfg.ema_alpha    = float(s.value("ema_alpha",  cfg.ema_alpha))
         cfg.min_dist_px  = float(s.value("min_dist_px", cfg.min_dist_px))
         cfg.tension      = float(s.value("tension",     cfg.tension))
+        cfg.fade_slowdown = float(s.value("fade_slowdown", cfg.fade_slowdown))
         return cfg
 
 # ------------------------- Overlay window -------------------------
 @dataclass
 class TrailPoint:
-    x: int; y: int; t: float; stroke: int
+    x: int; y: int; t: float; stroke: int; age: float = 0.0
 
 class Overlay(QtWidgets.QWidget):
     paused_changed = QtCore.pyqtSignal(bool)
@@ -320,6 +356,12 @@ class Overlay(QtWidgets.QWidget):
     # ----- sampling / smoothing -----
     def tick(self):
         now = time.time()
+        
+        # Increment age for all trail points (only when SHIFT is not held)
+        if not shift_down():
+            for point in self.points:
+                point.age += 0.016  # 16ms increment
+        
         if not self.paused:
             pressed = ctrl_down()
             if pressed and not self.prev_ctrl:
@@ -344,9 +386,9 @@ class Overlay(QtWidgets.QWidget):
                     self.points.append(TrailPoint(int(sx), int(sy), now, self.stroke_id))
             self.prev_ctrl = pressed
 
-        cutoff = now - self.cfg.fade_seconds
-        if self.points and self.points[0].t < cutoff:
-            self.points = [p for p in self.points if p.t >= cutoff]
+        # Remove trail points based on age instead of time
+        if self.points:
+            self.points = [p for p in self.points if p.age < self.cfg.fade_seconds]
         self.update()
 
     # ----- utils -----
@@ -363,8 +405,7 @@ class Overlay(QtWidgets.QWidget):
     def _age_to_fade_and_color(self, age: float):
         life = max(0.0, min(1.0, age / self.cfg.fade_seconds))
         fade = 1.0 - life
-        fade = math.pow(fade, 1/2)
-        print(fade)
+        fade = math.pow(fade, 1/self.cfg.fade_slowdown)
         s = self.cfg.color_start; e = self.cfg.color_end
         r = int(s.red()   + (e.red()   - s.red())   * life)
         g = int(s.green() + (e.green() - s.green()) * life)
@@ -400,7 +441,6 @@ class Overlay(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
 
-        now = time.time()
         pts = self.points; n = len(pts); i = 0
         while i < n:
             j = i + 1; sid = pts[i].stroke
@@ -419,7 +459,7 @@ class Overlay(QtWidgets.QWidget):
                     C1, C2 = self._catmull_rom_to_bezier(P0, P1, P2, P3, self.cfg.tension)
                     path = QtGui.QPainterPath(P1); path.cubicTo(C1, C2, P2)
 
-                    age = now - p2.t
+                    age = p2.age
                     fade, _ = self._age_to_fade_and_color(age)
                     if fade <= 0.0: continue
                     self._set_pens_for_age(painter, age)
@@ -427,8 +467,8 @@ class Overlay(QtWidgets.QWidget):
                     painter.setPen(self.core_pen); painter.drawPath(path)
 
                 tail, head = segment[0], segment[-1]
-                self._draw_round_cap(painter, tail.x, tail.y, now - tail.t)
-                self._draw_round_cap(painter, head.x, head.y, now - head.t)
+                self._draw_round_cap(painter, tail.x, tail.y, tail.age)
+                self._draw_round_cap(painter, head.x, head.y, head.age)
 
             i = j
 
@@ -455,6 +495,10 @@ class SettingsDialog(QtWidgets.QDialog):
         self.spin_fade = QtWidgets.QDoubleSpinBox()
         self.spin_fade.setRange(0.1, 20.0); self.spin_fade.setSingleStep(0.1)
         self.spin_fade.setValue(self.cfg.fade_seconds)
+        
+        self.spin_fade_slowdown = QtWidgets.QDoubleSpinBox()
+        self.spin_fade_slowdown.setRange(1.0, 3.0); self.spin_fade_slowdown.setSingleStep(0.1)
+        self.spin_fade_slowdown.setValue(self.cfg.fade_slowdown)
 
         self.spin_core = QtWidgets.QSpinBox(); self.spin_core.setRange(1, 100); self.spin_core.setValue(self.cfg.core_width)
         self.spin_glow = QtWidgets.QSpinBox(); self.spin_glow.setRange(0, 200); self.spin_glow.setValue(self.cfg.glow_width)
@@ -473,6 +517,7 @@ class SettingsDialog(QtWidgets.QDialog):
         form.addRow("Start color:", cstart)
         form.addRow("Finish color:", cend)
         form.addRow("Fade (seconds):", self.spin_fade)
+        form.addRow("Fade slowdown:", self.spin_fade_slowdown)
 
         # Core/glow with sliders + spinboxes linked
         coreBox = QtWidgets.QHBoxLayout(); coreBox.addWidget(self.slider_core); coreBox.addWidget(self.spin_core)
@@ -511,6 +556,7 @@ class SettingsDialog(QtWidgets.QDialog):
         # live-apply on any change
         for w, attr in [
             (self.spin_fade, "fade_seconds"),
+            (self.spin_fade_slowdown, "fade_slowdown"),
             (self.spin_core, "core_width"),
             (self.spin_glow, "glow_width"),
             (self.spin_ema,  "ema_alpha"),
