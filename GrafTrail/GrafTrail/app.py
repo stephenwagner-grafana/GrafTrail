@@ -11,12 +11,13 @@
 # Build: pyinstaller --noconsole --onefile --name "CyanTrail" trail_app_gui.py
 
 import sys, time, os, ctypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 from pathlib import Path
 
 import pyautogui
 from PyQt5 import QtCore, QtGui, QtWidgets
+import platform   # Platform detection for cross-platform compatibility
 
 pyautogui.FAILSAFE = False
 
@@ -24,13 +25,50 @@ APP_NAME    = "GrafTrail"
 ORG_NAME    = "GrafTrail"   # for QSettings
 ORG_DOMAIN  = "graftrail.local"
 
-# ------------------------- Windows helpers -------------------------
+# ------------------------- Cross-platform helpers -------------------------
+def get_platform() -> str:
+    """Get the current platform name in lowercase."""
+    return platform.system().lower()
+
+# Windows system metrics constants for multi-monitor setups
 SM_XVIRTUALSCREEN  = 76
 SM_YVIRTUALSCREEN  = 77
 SM_CXVIRTUALSCREEN = 78
 SM_CYVIRTUALSCREEN = 79
 VK_LCONTROL = 0xA2
 VK_RCONTROL = 0xA3
+
+# Platform-specific global state for CTRL key tracking
+_ctrl_pressed = False
+_key_monitor = None
+
+class GlobalKeyMonitor(QtCore.QObject):
+    """Cross-platform global key state monitor using Qt events."""
+    
+    def __init__(self):
+        super().__init__()
+        self.ctrl_pressed = False
+        
+    def eventFilter(self, obj, event):
+        """Qt event filter to track CTRL key state globally."""
+        if event.type() == QtCore.QEvent.KeyPress:
+            if event.key() == QtCore.Qt.Key_Control:
+                self.ctrl_pressed = True
+        elif event.type() == QtCore.QEvent.KeyRelease:
+            if event.key() == QtCore.Qt.Key_Control:
+                self.ctrl_pressed = False
+        return False
+
+def _init_key_monitor():
+    """Initialize platform-specific key monitoring."""
+    global _key_monitor
+    current_platform = get_platform()
+    
+    if current_platform != "windows":
+        _key_monitor = GlobalKeyMonitor()
+        app = QtWidgets.QApplication.instance()
+        if app:
+            app.installEventFilter(_key_monitor)
 
 def asset_path(*parts) -> str:
     """Return absolute path to a bundled asset (PyInstaller friendly)."""
@@ -43,18 +81,60 @@ def asset_path(*parts) -> str:
 
 
 def virtual_rect() -> QtCore.QRect:
-    u32 = ctypes.windll.user32
-    return QtCore.QRect(
-        u32.GetSystemMetrics(SM_XVIRTUALSCREEN),
-        u32.GetSystemMetrics(SM_YVIRTUALSCREEN),
-        u32.GetSystemMetrics(SM_CXVIRTUALSCREEN),
-        u32.GetSystemMetrics(SM_CYVIRTUALSCREEN),
-    )
+    """Get the bounding rectangle that encompasses all monitors (cross-platform)."""
+    current_platform = get_platform()
+    
+    if current_platform == "windows":
+        u32 = ctypes.windll.user32
+        return QtCore.QRect(
+            u32.GetSystemMetrics(SM_XVIRTUALSCREEN),
+            u32.GetSystemMetrics(SM_YVIRTUALSCREEN),
+            u32.GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            u32.GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    else:
+        # Use Qt's cross-platform desktop widget for macOS/Linux
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            return QtCore.QRect(0, 0, 1920, 1080)
+            
+        desktop = app.desktop()
+        screen_count = desktop.screenCount()
+        if screen_count == 1:
+            return desktop.screenGeometry(0)
+        
+        # Multi-monitor: find bounding rectangle
+        left = min(desktop.screenGeometry(i).left() for i in range(screen_count))
+        top = min(desktop.screenGeometry(i).top() for i in range(screen_count))
+        right = max(desktop.screenGeometry(i).right() for i in range(screen_count))
+        bottom = max(desktop.screenGeometry(i).bottom() for i in range(screen_count))
+        
+        return QtCore.QRect(left, top, right - left + 1, bottom - top + 1)
 
 def ctrl_down() -> bool:
-    u32 = ctypes.windll.user32
-    return bool((u32.GetAsyncKeyState(VK_LCONTROL) & 0x8000) or
-                (u32.GetAsyncKeyState(VK_RCONTROL) & 0x8000))
+    """Check if either CTRL key is currently pressed (cross-platform)."""
+    current_platform = get_platform()
+    
+    if current_platform == "windows":
+        u32 = ctypes.windll.user32
+        return bool((u32.GetAsyncKeyState(VK_LCONTROL) & 0x8000) or
+                    (u32.GetAsyncKeyState(VK_RCONTROL) & 0x8000))
+    else:
+        # Use Qt-based monitoring for macOS/Linux
+        global _key_monitor
+        if _key_monitor is None:
+            _init_key_monitor()
+        
+        if _key_monitor:
+            return _key_monitor.ctrl_pressed
+        
+        # Fallback: check current application key state
+        app = QtWidgets.QApplication.instance()
+        if app:
+            modifiers = app.keyboardModifiers()
+            return bool(modifiers & QtCore.Qt.ControlModifier)
+        
+        return False
 
 def exe_path_for_run():
     if getattr(sys, "frozen", False):
@@ -62,34 +142,87 @@ def exe_path_for_run():
     return os.path.abspath(sys.argv[0])
 
 def set_run_at_startup(enable: bool):
+    """Enable or disable automatic startup (cross-platform)."""
+    current_platform = get_platform()
+    
     try:
-        import winreg
-        run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_ALL_ACCESS) as k:
+        if current_platform == "windows":
+            import winreg
+            run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_ALL_ACCESS) as k:
+                if enable:
+                    winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, exe_path_for_run())
+                else:
+                    try: winreg.DeleteValue(k, APP_NAME)
+                    except FileNotFoundError: pass
+            return True
+        elif current_platform == "darwin":
+            import plistlib
+            launch_agents_dir = os.path.expanduser("~/Library/LaunchAgents")
+            plist_path = os.path.join(launch_agents_dir, f"com.{APP_NAME.lower()}.plist")
+            
             if enable:
-                winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, exe_path_for_run())
+                os.makedirs(launch_agents_dir, exist_ok=True)
+                plist_data = {
+                    'Label': f'com.{APP_NAME.lower()}',
+                    'ProgramArguments': [exe_path_for_run()],
+                    'RunAtLoad': True,
+                    'KeepAlive': False
+                }
+                with open(plist_path, 'wb') as f:
+                    plistlib.dump(plist_data, f)
             else:
-                try: winreg.DeleteValue(k, APP_NAME)
+                try: os.remove(plist_path)
                 except FileNotFoundError: pass
-        return True
+            return True
+        else:  # Linux
+            autostart_dir = os.path.expanduser("~/.config/autostart")
+            desktop_path = os.path.join(autostart_dir, f"{APP_NAME}.desktop")
+            
+            if enable:
+                os.makedirs(autostart_dir, exist_ok=True)
+                desktop_content = f"""[Desktop Entry]
+Type=Application
+Name={APP_NAME}
+Exec={exe_path_for_run()}
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+"""
+                with open(desktop_path, 'w') as f:
+                    f.write(desktop_content)
+            else:
+                try: os.remove(desktop_path)
+                except FileNotFoundError: pass
+            return True
     except Exception:
         return False
 
 def is_run_at_startup():
+    """Check if application is set to run at startup (cross-platform)."""
+    current_platform = get_platform()
+    
     try:
-        import winreg
-        run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_READ) as k:
-            val, _ = winreg.QueryValueEx(k, APP_NAME)
-            return bool(val)
+        if current_platform == "windows":
+            import winreg
+            run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_READ) as k:
+                val, _ = winreg.QueryValueEx(k, APP_NAME)
+                return bool(val)
+        elif current_platform == "darwin":
+            plist_path = os.path.expanduser(f"~/Library/LaunchAgents/com.{APP_NAME.lower()}.plist")
+            return os.path.exists(plist_path)
+        else:  # Linux
+            desktop_path = os.path.expanduser(f"~/.config/autostart/{APP_NAME}.desktop")
+            return os.path.exists(desktop_path)
     except Exception:
         return False
 
 # ------------------------- Config model -------------------------
 @dataclass
 class Config:
-    color_start: QtGui.QColor = QtGui.QColor(240, 90, 40)
-    color_end:   QtGui.QColor = QtGui.QColor(251, 202, 10)
+    color_start: QtGui.QColor = field(default_factory=lambda: QtGui.QColor(240, 90, 40))
+    color_end:   QtGui.QColor = field(default_factory=lambda: QtGui.QColor(251, 202, 10))
     fade_seconds: float = 1.5
     core_width:   int   = 17
     glow_width:   int   = 23
@@ -490,6 +623,9 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setOrganizationName(ORG_NAME); app.setOrganizationDomain(ORG_DOMAIN); app.setApplicationName(APP_NAME)
+
+    # Initialize cross-platform key monitoring
+    _init_key_monitor()
 
     settings = QtCore.QSettings(QtCore.QSettings.UserScope, ORG_NAME, APP_NAME)
     cfg = Config.load(settings)
