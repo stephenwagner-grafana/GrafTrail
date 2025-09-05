@@ -1,11 +1,62 @@
-@"
+# GrafTrail - Build and Distribution Artifacts
+# =============================================
+
+# Build directories
+build/
+build_*/
+dist/
+dist_*/
+
+# PyInstaller artifacts
+*.spec.bak
+*.egg-info/
+
+# Python artifacts
 __pycache__/
 *.pyc
-.venv/
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache/
+
+# Virtual environments
 venv/
-build/
-dist/
-*.spec
-.idea/
+env/
+ENV/
+
+# IDE and editor files
 .vscode/
-"@ | Out-File -Encoding utf8 .gitignore
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# PyInstaller working directories
+*.egg-info/
+__pycache__/
+
+# Distribution packages
+*.tar.gz
+*.zip
+*.dmg
+*.exe
+*.deb
+*.rpm
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

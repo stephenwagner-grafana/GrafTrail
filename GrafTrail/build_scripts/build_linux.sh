@@ -65,7 +65,6 @@ mkdir -p "$DIST_DIR"
 # Build main application
 echo "Building GrafTrail main application..."
 pyinstaller --clean --noconfirm \
-    --specpath "$BUILD_DIR" \
     --workpath "$BUILD_DIR/build" \
     --distpath "$DIST_DIR" \
     "$PROJECT_ROOT/build_configs/graftrail_app.spec"
@@ -73,7 +72,6 @@ pyinstaller --clean --noconfirm \
 # Build overlay application
 echo "Building GrafTrail overlay application..."
 pyinstaller --clean --noconfirm \
-    --specpath "$BUILD_DIR" \
     --workpath "$BUILD_DIR/build" \
     --distpath "$DIST_DIR" \
     "$PROJECT_ROOT/build_configs/graftrail_overlay.spec"
