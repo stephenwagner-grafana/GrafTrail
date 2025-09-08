@@ -5,6 +5,8 @@
 Create stunning mouse trails with smooth curves, customizable colors, and precise time control. Perfect for presentations, screen recordings, digital art, or just adding some visual flair to your desktop!
 
 ![GrafTrail Demo](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+![graftrail](https://github.com/user-attachments/assets/011d48ee-241a-44ab-aa67-3e60a436109f)
+
 ![Version](https://img.shields.io/badge/Version-v1.5.1-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
@@ -14,7 +16,6 @@ Create stunning mouse trails with smooth curves, customizable colors, and precis
 - **CTRL + Drag**: Create beautiful mouse trails that follow your cursor
 - **SHIFT + Hold**: Pause trail aging to freeze the current visual state
 - **CAPS LOCK Toggle**: Pause aging when CAPS LOCK is enabled (hands-free!)
-- **Fat Rounded Caps**: Professional start and end caps for polished trails
 - **Cross-Platform**: Works seamlessly on Windows, macOS, and Linux
 - **Always-on-Top**: Overlay that doesn't interfere with your workflow
 
@@ -22,12 +23,9 @@ Create stunning mouse trails with smooth curves, customizable colors, and precis
 - **Multi-Color Gradients**: 1, 2, 3, or Rainbow color schemes with full customization
 - **Smooth Catmull-Rom Curves**: Mathematically perfect, silky-smooth trail paths
 - **Advanced Glow System**: Configurable glow effects with gradient layers
-- **Fat Rounded Caps**: Beautiful 5% smaller caps at trail start and end
-- **Clean Trail Rendering**: Single-pass stroke rendering prevents overlapping
 - **Particle Effects**: Optional sparks and ice crystal trails
 
 ### ⚙️ **Customization**
-- **Advanced UI**: Clean interface with basic settings and optional advanced section
 - **Multi-Color System**: 1, 2, 3, or Rainbow color gradients with full customization
 - **Flexible Glow**: Optional glow effects with percentage-based sizing
 - **Fade Control**: Adjustable fade duration (0.1-20 seconds) and slowdown curves
@@ -47,9 +45,7 @@ Create stunning mouse trails with smooth curves, customizable colors, and precis
 
 ### Download & Run
 1. **Download** the latest release for your platform:
-   - **Windows**: `GrafTrail-v1.5.1.exe`
-   - **Linux**: `GrafTrail-v1.5.1-Linux.tar.gz`
-   - **macOS**: `GrafTrail-v1.5.1-macOS.tar.gz`
+   - **Windows**: `GrafTrail-v1.5.3.exe`
 
 2. **Run** the executable - no installation required!
 
@@ -65,6 +61,7 @@ Create stunning mouse trails with smooth curves, customizable colors, and precis
 | **CTRL + Mouse Move** | Create beautiful mouse trail |
 | **SHIFT + Hold** | Pause trail aging (temporary freeze) |
 | **CAPS LOCK On** | Pause trail aging (toggle freeze) |
+| **ALT+1 (2, 3, or 4)** | Change Stroke to Freehand, Box, Circle, or Arrow |
 | **System Tray → Settings** | Open customization panel |
 | **System Tray → Pause** | Pause/resume trail creation |
 
