@@ -1,4 +1,4 @@
-# GrafTrail - Cross-Platform Mouse Trail Application
+# GrafTrail v1.5.1 - Cross-Platform Mouse Trail Application
 # Requirements for building executables
 
 # Core dependencies
@@ -9,9 +9,9 @@ pyautogui>=0.9.54           # Mouse position detection (cross-platform)
 pyinstaller>=5.13.0         # Executable creation
 pillow>=9.0.0              # Image processing for icons
 
-# Platform-specific dependencies (automatically handled)
+# Platform-specific dependencies
 # Windows: pywin32 (included with PyQt5)
-# macOS: PyObjC (optional, fallback to Qt)
+pyobjc-framework-Cocoa>=9.0.0; sys_platform == "darwin"  # macOS global key detection
 # Linux: python3-tk (system package)
 
 # Development dependencies (optional)

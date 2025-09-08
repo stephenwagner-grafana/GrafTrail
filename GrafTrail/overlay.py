@@ -656,13 +656,13 @@ class Overlay(QtWidgets.QWidget):
         glow.setAlpha(int(fade * GLOW_ALPHA_MAX))
         painter.setPen(QtCore.Qt.NoPen)              # No outline
         painter.setBrush(QtGui.QBrush(glow))         # Solid fill
-        painter.drawEllipse(center, self.glow_pen.width()/2, self.glow_pen.width()/2)
+        painter.drawEllipse(center, int(self.glow_pen.width()/2), int(self.glow_pen.width()/2))
 
         # Draw core circle (inner, more opaque)
         core = QtGui.QColor(col)
         core.setAlpha(int(fade * CORE_ALPHA_MAX))
         painter.setBrush(QtGui.QBrush(core))         # Solid fill
-        painter.drawEllipse(center, self.core_pen.width()/2, self.core_pen.width()/2)
+        painter.drawEllipse(center, int(self.core_pen.width()/2), int(self.core_pen.width()/2))
 
     # ===================================================================
     # RENDERING
